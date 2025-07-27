@@ -126,8 +126,6 @@ claude-daily-reporter/
 ├── bin/
 │   ├── claude-history-backup.sh # バックアップスクリプト
 │   └── claude-daily-report.sh   # 日報生成スクリプト
-├── commands/
-│   └── analyze-daily-work.md    # Claude分析コマンド（テンプレート対応）
 ├── templates/
 │   ├── simple.md                # シンプル版テンプレート（デフォルト）
 │   └── detail.md                # 詳細版テンプレート
@@ -189,8 +187,6 @@ claude-daily-reporter/
 ### テンプレートの追加
 `templates/`ディレクトリに新しい`.md`ファイルを作成することで、カスタムテンプレートを追加できます。
 
-### 分析コマンドのカスタマイズ
-`commands/analyze-daily-work.md`を編集することで、AI分析の挙動をカスタマイズできます。
 
 ## 安全性について
 

@@ -180,52 +180,6 @@ analyze_daily_activities() {
         fi
     done < <(jq -r '.projects | to_entries[] | "\(.key)|\(.value.total_entries)"' "$BACKUP_FILE")
     
-    # Claude Code を使用して分析
-    local command_file="$SCRIPT_DIR/../commands/analyze-daily-work.md"
-    
-    # claudeコマンドのパスを動的に検出
-    claude_cmd=$(find_claude_command)
-    
-    if [ -f "$command_file" ] && [ -n "$claude_cmd" ]; then
-        # 一時ファイルを使用してプロンプトを作成
-        local temp_prompt=$(mktemp)
-        local temp_messages=$(mktemp)
-        
-        # メッセージを一時ファイルに保存
-        echo "$all_messages" > "$temp_messages"
-        
-        # テンプレートを読み込み、プレースホルダーを置き換え
-        awk -v msg_file="$temp_messages" -v template="$TEMPLATE" '
-            /{USER_MESSAGES}/ {
-                while ((getline line < msg_file) > 0) {
-                    print line
-                }
-                close(msg_file)
-                next
-            }
-            /{TEMPLATE_TYPE}/ {
-                gsub(/{TEMPLATE_TYPE}/, template)
-            }
-            { print }
-        ' "$command_file" > "$temp_prompt"
-        
-        # Claude Code で分析
-        local result=$("$claude_cmd" < "$temp_prompt" 2>/dev/null)
-        
-        # 一時ファイルを削除
-        rm -f "$temp_messages" "$temp_prompt"
-        
-        # 結果があれば解析して出力
-        if [ -n "$result" ]; then
-            # 統一された解析（両テンプレートとも同じ処理）
-            echo "$result" | awk '
-                /## 今日やったこと/,/^$/ {
-                    if ($0 ~ /^- /) print "WORK:" $0
-                }
-            '
-            return
-        fi
-    fi
     
     # フォールバック：キーワード検索
     if [ -n "$all_messages" ]; then
@@ -328,22 +282,15 @@ extract_troubled_things() {
 
 # 分析ステータスを取得
 get_analysis_status() {
-    local command_file="$SCRIPT_DIR/../commands/analyze-daily-work.md"
-    
     # claudeコマンドのパスを動的に検出
     claude_cmd=$(find_claude_command)
     
-    if [ -f "$command_file" ] && [ -n "$claude_cmd" ]; then
+    if [ -n "$claude_cmd" ]; then
         echo "✅ **Claude分析済み** - AI分析によって作業内容を自動解析しました"
         echo "  - 使用したコマンド: $claude_cmd"
     else
         echo "⚠️ **キーワード検索のみ** - Claude分析機能が利用できませんでした"
-        if [ ! -f "$command_file" ]; then
-            echo "  - 分析コマンドファイルが見つかりません: $command_file"
-        fi
-        if [ -z "$claude_cmd" ]; then
-            echo "  - Claude Codeコマンドが見つかりません"
-        fi
+        echo "  - Claude Codeコマンドが見つかりません"
     fi
 }
 
