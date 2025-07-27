@@ -244,9 +244,74 @@ analyze_daily_activities() {
 
 
 
-# 分析結果から各項目を抽出
+# 分析結果から各項目を抽出（プロジェクト別にグループ化）
 extract_work_items() {
-    echo "$DAILY_ANALYSIS" | grep "^WORK:" | sed 's/^WORK://' | head -5
+    if [ "$TOTAL_PROJECTS" -eq 0 ]; then
+        echo "### 作業なし"
+        echo "- この日は Claude Code での作業記録がありません"
+        return
+    fi
+    
+    # 各プロジェクトを処理
+    while IFS='|' read -r project_path entries; do
+        # プロジェクト名を適切に抽出
+        local project_name=""
+        if [[ "$project_path" == *"/claude/daily/reporter"* ]] || [[ "$project_path" == *"claude-daily-reporter"* ]]; then
+            project_name="claude-daily-reporter"
+        elif [[ "$project_path" == *"/order/print"* ]]; then
+            project_name="order-print"
+        else
+            # その他のプロジェクトの場合は最後の2つのディレクトリ名を結合
+            local dir1=$(basename "$(dirname "$project_path")")
+            local dir2=$(basename "$project_path")
+            project_name="${dir1}-${dir2}"
+        fi
+        
+        echo "### $project_name"
+        
+        # プロジェクトのメッセージを取得
+        local project_messages=$(jq -r --arg proj "$project_path" '
+            .projects[$proj].sessions | 
+            to_entries[]? | 
+            .value.entries[]? | 
+            select(.type == "user" and (.message.content | type) == "string") | 
+            .message.content
+        ' "$BACKUP_FILE" 2>/dev/null | 
+            grep -v "^$" | 
+            grep -v "^# 日報分析コマンド$" | 
+            grep -E ".{10,}" | 
+            head -200)
+            
+        # アシスタントの作業メッセージも取得
+        local assistant_messages=$(jq -r --arg proj "$project_path" '
+            .projects[$proj].sessions | 
+            to_entries[]? | 
+            .value.entries[]? | 
+            select(.type == "assistant") | 
+            .message.content | 
+            if type == "array" then 
+                .[] | 
+                if .type == "text" then .text 
+                elif type == "string" then .
+                else empty end
+            elif type == "string" then . 
+            else empty end
+        ' "$BACKUP_FILE" 2>/dev/null | 
+            grep -E "(作成しました|更新しました|削除しました|追加しました|変更しました|修正しました|実装しました|完了しました|ファイル|テンプレート|スクリプト|コマンド)" | 
+            grep -v "^#" | 
+            head -200)
+        
+        # プロジェクト別の作業内容を分析
+        local all_project_messages="$project_messages"$'\n'"$assistant_messages"
+        local work_items=$(analyze_project_activities "$project_path" "$all_project_messages")
+        
+        if [ -n "$work_items" ]; then
+            echo "$work_items"
+        else
+            echo "- 作業内容を取得できませんでした"
+        fi
+        echo ""
+    done < <(jq -r '.projects | to_entries[] | "\(.key)|\(.value.total_entries)"' "$BACKUP_FILE")
 }
 
 extract_learned_things() {
